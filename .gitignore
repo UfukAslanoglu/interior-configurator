@@ -1,0 +1,13 @@
+node_modules
+dist
+.DS_Store
+*.log
+.env
+.env.local
+.env.*.local
+
+# 3D modeller artık Supabase Storage'daki "furniture-models" bucket'ından
+# yükleniyor (bkz. src/data/catalogData.js) — repo'yu 620MB büyütmesin diye
+# yerel kopyaları git'e girmiyor. Yeni bir model eklerken .glb dosyasını
+# hem buraya (yerel test için) hem de Storage bucket'ına koymayı unutma.
+public/models
