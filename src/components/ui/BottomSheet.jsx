@@ -81,7 +81,7 @@ export default function BottomSheet({ isOpen, onClose, children }) {
         <span className="h-1.5 w-12 rounded-full bg-neutral-300" />
         {expanded ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
       </div>
-      <div className="flex-1 overflow-hidden">{children}</div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
     </div>
   );
 }
