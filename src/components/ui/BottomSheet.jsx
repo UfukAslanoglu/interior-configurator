@@ -1,8 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 
-/** Minimum finger travel (px) before a touch counts as a drag instead of a tap. */
-const DRAG_THRESHOLD = 40;
+/** Minimum finger travel (px) before a drag counts instead of a tap. */
+const DRAG_THRESHOLD = 30;
 
 /**
  * Mobile bottom sheet: same frosted-glass material as the desktop
@@ -13,54 +13,76 @@ const DRAG_THRESHOLD = 40;
  *  - `expanded` (local): while open, a short "peek" height vs a taller
  *    "expanded" height, toggled by the handle bar — unrelated to open/close.
  *
- * The handle supports a real finger-drag (not just a tap): dragging it up
- * or down past `DRAG_THRESHOLD` expands/collapses the sheet, and it follows
- * the finger live via an inline `transform` while dragging (CSS transition
- * disabled during the drag so it doesn't fight the live movement, then
- * re-enabled on release so it snaps smoothly to the final height). A short
- * tap (no real movement) still just toggles, same as before.
+ * Drag handling uses native `onTouchStart/Move/End` for touch (the most
+ * consistently supported path across mobile Safari/Chrome for this kind of
+ * gesture) and separately `onPointer*` guarded to skip `pointerType ===
+ * 'touch'` for desktop mouse-drag — the two never double-handle the same
+ * interaction. The handle also got a much bigger hit area (44px+ tall,
+ * matching Apple's minimum touch target) since the earlier, thinner strip
+ * was easy to miss with a finger. A tap with no real movement still just
+ * toggles, same as before.
  *
  * @param {{ isOpen: boolean, children: React.ReactNode }} props
  */
 export default function BottomSheet({ isOpen, children }) {
   const [expanded, setExpanded] = useState(true);
   const [dragY, setDragY] = useState(0);
-  const isDraggingRef = useRef(false);
   const startYRef = useRef(0);
+  const dragYRef = useRef(0);
+  const draggingRef = useRef(false);
   const movedRef = useRef(false);
 
-  const handlePointerDown = useCallback((event) => {
-    isDraggingRef.current = true;
+  const startDrag = useCallback((clientY) => {
+    draggingRef.current = true;
     movedRef.current = false;
-    startYRef.current = event.clientY;
-    event.currentTarget.setPointerCapture(event.pointerId);
+    startYRef.current = clientY;
   }, []);
 
-  const handlePointerMove = useCallback((event) => {
-    if (!isDraggingRef.current) return;
-    const delta = event.clientY - startYRef.current;
+  const moveDrag = useCallback((clientY) => {
+    if (!draggingRef.current) return;
+    const delta = clientY - startYRef.current;
     if (Math.abs(delta) > 4) movedRef.current = true;
+    dragYRef.current = delta;
     setDragY(delta);
   }, []);
 
-  const endDrag = useCallback(
+  const endDrag = useCallback(() => {
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
+    if (movedRef.current) {
+      if (dragYRef.current > DRAG_THRESHOLD) setExpanded(false);
+      else if (dragYRef.current < -DRAG_THRESHOLD) setExpanded(true);
+    } else {
+      setExpanded((value) => !value);
+    }
+    dragYRef.current = 0;
+    setDragY(0);
+  }, []);
+
+  const handleTouchStart = useCallback((event) => startDrag(event.touches[0].clientY), [startDrag]);
+  const handleTouchMove = useCallback((event) => moveDrag(event.touches[0].clientY), [moveDrag]);
+
+  const handlePointerDown = useCallback(
     (event) => {
-      if (!isDraggingRef.current) return;
-      isDraggingRef.current = false;
-      if (event?.currentTarget?.releasePointerCapture && event.pointerId != null) {
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      }
-      if (!movedRef.current) {
-        // No real drag happened — treat it as a tap, same as the old button.
-        setExpanded((value) => !value);
-      } else if (dragY > DRAG_THRESHOLD) {
-        setExpanded(false);
-      } else if (dragY < -DRAG_THRESHOLD) {
-        setExpanded(true);
-      }
-      setDragY(0);
+      if (event.pointerType === 'touch') return; // touch is handled above
+      startDrag(event.clientY);
+      event.currentTarget.setPointerCapture(event.pointerId);
     },
-    [dragY]
+    [startDrag]
+  );
+  const handlePointerMove = useCallback(
+    (event) => {
+      if (event.pointerType === 'touch') return;
+      moveDrag(event.clientY);
+    },
+    [moveDrag]
+  );
+  const handlePointerUp = useCallback(
+    (event) => {
+      if (event.pointerType === 'touch') return;
+      endDrag();
+    },
+    [endDrag]
   );
 
   const isDragging = dragY !== 0;
@@ -83,16 +105,21 @@ export default function BottomSheet({ isOpen, children }) {
       }}
     >
       <div
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={endDrag}
+        onTouchCancel={endDrag}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
         role="button"
         tabIndex={0}
         aria-label={expanded ? 'Paneli küçült' : 'Paneli büyüt'}
-        className="flex touch-none items-center justify-center gap-1 py-2.5 text-neutral-400 active:cursor-grabbing"
+        className="flex touch-none items-center justify-center gap-1.5 py-4 text-neutral-400 active:cursor-grabbing"
+        style={{ minHeight: 44 }}
       >
-        <span className="h-1 w-10 rounded-full bg-neutral-300" />
+        <span className="h-1.5 w-12 rounded-full bg-neutral-300" />
         {expanded ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
       </div>
       <div className="flex-1 overflow-hidden">{children}</div>
