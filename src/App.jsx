@@ -45,7 +45,7 @@ export default function App() {
       <BackgroundPicker isOpen={isBackgroundPickerOpen} onClose={() => setIsBackgroundPickerOpen(false)} />
       <RoomMaterialPicker isOpen={isMaterialPickerOpen} onClose={() => setIsMaterialPickerOpen(false)} />
 
-      <ResponsivePanel isOpen={isCatalogOpen}>
+      <ResponsivePanel isOpen={isCatalogOpen} onClose={() => setIsCatalogOpen(false)}>
         <Toolbar
           title={selectedItemId ? 'Özellikler' : 'Katalog'}
           onClose={() => setIsCatalogOpen(false)}

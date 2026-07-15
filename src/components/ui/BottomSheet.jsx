@@ -1,8 +1,8 @@
-import { useCallback, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 
-/** Minimum finger travel (px) before a drag counts instead of a tap. */
-const DRAG_THRESHOLD = 30;
+/** Finger travel (px) past which a touch counts as a swipe instead of a tap. */
+const SWIPE_THRESHOLD = 40;
 
 /**
  * Mobile bottom sheet: same frosted-glass material as the desktop
@@ -11,88 +11,54 @@ const DRAG_THRESHOLD = 30;
  *  - `isOpen` (from App.jsx): whole sheet slides off the bottom of the
  *    screen when closed, same idea as FloatingPanel's slide-out.
  *  - `expanded` (local): while open, a short "peek" height vs a taller
- *    "expanded" height, toggled by the handle bar — unrelated to open/close.
+ *    "expanded" height, controlled by the handle bar.
  *
- * Drag handling uses native `onTouchStart/Move/End` for touch (the most
- * consistently supported path across mobile Safari/Chrome for this kind of
- * gesture) and separately `onPointer*` guarded to skip `pointerType ===
- * 'touch'` for desktop mouse-drag — the two never double-handle the same
- * interaction. The handle also got a much bigger hit area (44px+ tall,
- * matching Apple's minimum touch target) since the earlier, thinner strip
- * was easy to miss with a finger. A tap with no real movement still just
- * toggles, same as before.
+ * Gesture handling is deliberately minimal: only `onPointerDown` +
+ * `onPointerUp` on the handle, comparing the Y position at press vs release
+ * — no live-follow drag, no `onPointerMove` streaming, no touch/pointer
+ * branching. Earlier, fancier versions (tracking movement live, splitting
+ * touch vs mouse handling) kept failing on real phones in ways that were
+ * impossible to diagnose without a physical device to test on — this
+ * simpler up/down comparison has far fewer moving parts and works
+ * uniformly for touch AND mouse via the Pointer Events API, so there's much
+ * less that can silently go wrong:
+ *  - released roughly where pressed (< threshold) → tap → toggle
+ *  - released clearly BELOW where pressed → swipe down → collapse (or, if
+ *    already collapsed, fully close the panel via `onClose`, same as the
+ *    Toolbar's X button)
+ *  - released clearly ABOVE → swipe up → expand
  *
- * @param {{ isOpen: boolean, children: React.ReactNode }} props
+ * @param {{ isOpen: boolean, onClose?: () => void, children: React.ReactNode }} props
  */
-export default function BottomSheet({ isOpen, children }) {
+export default function BottomSheet({ isOpen, onClose, children }) {
   const [expanded, setExpanded] = useState(true);
-  const [dragY, setDragY] = useState(0);
-  const startYRef = useRef(0);
-  const dragYRef = useRef(0);
-  const draggingRef = useRef(false);
-  const movedRef = useRef(false);
+  const startYRef = useRef(null);
 
-  const startDrag = useCallback((clientY) => {
-    draggingRef.current = true;
-    movedRef.current = false;
-    startYRef.current = clientY;
-  }, []);
+  const handlePointerDown = (event) => {
+    startYRef.current = event.clientY;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
 
-  const moveDrag = useCallback((clientY) => {
-    if (!draggingRef.current) return;
-    const delta = clientY - startYRef.current;
-    if (Math.abs(delta) > 4) movedRef.current = true;
-    dragYRef.current = delta;
-    setDragY(delta);
-  }, []);
+  const handlePointerUp = (event) => {
+    if (startYRef.current === null) return;
+    const delta = event.clientY - startYRef.current;
+    startYRef.current = null;
 
-  const endDrag = useCallback(() => {
-    if (!draggingRef.current) return;
-    draggingRef.current = false;
-    if (movedRef.current) {
-      if (dragYRef.current > DRAG_THRESHOLD) setExpanded(false);
-      else if (dragYRef.current < -DRAG_THRESHOLD) setExpanded(true);
-    } else {
+    if (Math.abs(delta) < SWIPE_THRESHOLD) {
       setExpanded((value) => !value);
+    } else if (delta > 0) {
+      if (expanded) setExpanded(false);
+      else onClose?.();
+    } else {
+      setExpanded(true);
     }
-    dragYRef.current = 0;
-    setDragY(0);
-  }, []);
-
-  const handleTouchStart = useCallback((event) => startDrag(event.touches[0].clientY), [startDrag]);
-  const handleTouchMove = useCallback((event) => moveDrag(event.touches[0].clientY), [moveDrag]);
-
-  const handlePointerDown = useCallback(
-    (event) => {
-      if (event.pointerType === 'touch') return; // touch is handled above
-      startDrag(event.clientY);
-      event.currentTarget.setPointerCapture(event.pointerId);
-    },
-    [startDrag]
-  );
-  const handlePointerMove = useCallback(
-    (event) => {
-      if (event.pointerType === 'touch') return;
-      moveDrag(event.clientY);
-    },
-    [moveDrag]
-  );
-  const handlePointerUp = useCallback(
-    (event) => {
-      if (event.pointerType === 'touch') return;
-      endDrag();
-    },
-    [endDrag]
-  );
-
-  const isDragging = dragY !== 0;
+  };
 
   return (
     <div
       aria-hidden={!isOpen}
       className={[
-        'pointer-events-auto fixed inset-x-0 bottom-0 z-20 flex flex-col overflow-hidden rounded-t-2xl border-t border-white/50 shadow-[0_-8px_40px_rgba(0,0,0,0.14)]',
-        isDragging ? '' : 'transition-all duration-300 ease-out',
+        'pointer-events-auto fixed inset-x-0 bottom-0 z-20 flex flex-col overflow-hidden rounded-t-2xl border-t border-white/50 shadow-[0_-8px_40px_rgba(0,0,0,0.14)] transition-all duration-300 ease-out',
         expanded ? 'h-[70vh]' : 'h-[32vh]',
         isOpen ? 'translate-y-0' : 'pointer-events-none translate-y-full',
       ].join(' ')}
@@ -101,22 +67,15 @@ export default function BottomSheet({ isOpen, children }) {
         backdropFilter: 'blur(10px)',
         WebkitBackdropFilter: 'blur(10px)',
         paddingBottom: 'env(safe-area-inset-bottom)',
-        ...(isDragging ? { transform: `translateY(${Math.max(0, dragY)}px)` } : null),
       }}
     >
       <div
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={endDrag}
-        onTouchCancel={endDrag}
         onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
         role="button"
         tabIndex={0}
-        aria-label={expanded ? 'Paneli küçült' : 'Paneli büyüt'}
-        className="flex touch-none items-center justify-center gap-1.5 py-4 text-neutral-400 active:cursor-grabbing"
+        aria-label={expanded ? 'Paneli küçült' : 'Paneli büyüt/kapat'}
+        className="flex touch-none items-center justify-center gap-1.5 py-4 text-neutral-400"
         style={{ minHeight: 44 }}
       >
         <span className="h-1.5 w-12 rounded-full bg-neutral-300" />
