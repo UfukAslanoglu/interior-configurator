@@ -23,7 +23,7 @@ export default function FurnitureCatalog() {
   };
 
   return (
-    <div className="flex flex-col gap-5 overflow-y-auto px-4 py-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 py-4">
       {CATALOG.map((category) => (
         <section key={category.categoryName}>
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
