@@ -14,14 +14,23 @@ export const ROOM = Object.freeze({
 export const GRID_SIZE = 0.05; // 5cm snapping grid for furniture placement
 
 export const CAMERA = Object.freeze({
-  fov: 48,
-  position: [3.3, 2.0, 3.6], // pulled in tight for a product-shot feel
-  minDistance: 0.9, // close enough to inspect furniture detail
-  maxDistance: 7.2, // wide enough to see the whole room at once; target-clamping in CameraRig keeps this from poking through walls
-  zoomSpeed: 1.15,
+  // Was 48 (a narrow, telephoto-ish angle) — widened so the DEFAULT view
+  // (before the user does anything) already reads as "standing in a normal
+  // room" instead of "zoomed into a corner", especially on tall/narrow
+  // mobile screens.
+  fov: 58,
+  // Pulled back from [3.3, 2.0, 3.6] (distance ~5.3m) to give more breathing
+  // room by default, same reasoning as the fov change above.
+  position: [4.4, 2.6, 4.8],
+  minDistance: 0.6, // close enough to inspect furniture detail
+  // Was 7.2 — only ~35% further than the old starting distance, so pinch/
+  // scroll zoom-out hit its limit almost immediately and the room always
+  // felt cramped/"inside it". Raised a lot so people can pull back far
+  // enough to see the scene background (city skyline, etc.) around the room too.
+  maxDistance: 18,
+  zoomSpeed: 1.3,
   minPolarAngle: Math.PI / 8,
   maxPolarAngle: Math.PI / 2.1, // keep the camera from diving under the floor
-  panMargin: 0.4, // meters kept clear of walls/floor/ceiling when panning (see CameraRig)
 });
 
 /**

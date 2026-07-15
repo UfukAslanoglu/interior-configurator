@@ -44,7 +44,7 @@ export default function RoomScene() {
       dpr={[1, 1.8]}
       gl={{ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: true }}
       onPointerMissed={clearSelection}
-      className="!absolute inset-0"
+      className="!absolute inset-0 touch-none"
     >
       <CanvasCapture />
       <AdaptiveDpr pixelated={false} />
